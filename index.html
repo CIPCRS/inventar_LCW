@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Inventar LCW Offline</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0f2a4a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script src="config.js"></script>
+<style>
+:root{--navy:#0f2a4a;--navy2:#163a66;--bg:#eef2f7;--card:#fff;--txt:#17202b;--mut:#60708a;--ok:#16a34a;--okbg:#dcfce7;--warn:#d97706;--warnbg:#fef3c7;--err:#dc2626;--errbg:#fee2e2;--info:#2563eb;--infobg:#dbeafe;--line:#d9e1ec;--r:12px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:16px}
+body{display:flex;flex-direction:column;min-height:100vh}
+button{font:inherit;cursor:pointer;border:0;border-radius:var(--r);padding:12px 16px;background:var(--navy);color:#fff;font-weight:600;min-height:46px}
+button.sec{background:#fff;color:var(--navy);border:2px solid var(--navy)}
+button.ghost{background:transparent;color:var(--navy);border:0;padding:8px 10px;min-height:0}
+button.ok{background:var(--ok)}button.warn{background:var(--warn)}button.err{background:var(--err)}
+button:disabled{opacity:.5;cursor:default}
+input,select{font:inherit;width:100%;padding:12px 14px;border:2px solid var(--line);border-radius:var(--r);background:#fff;min-height:46px;color:var(--txt)}
+input:focus,select:focus{outline:none;border-color:var(--navy)}
+header{background:var(--navy);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+header h1{font-size:17px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header .sub{font-size:12px;opacity:.8;font-weight:400}
+header button{background:rgba(255,255,255,.15);padding:8px 12px;min-height:38px;font-size:14px}
+.dot{width:10px;height:10px;border-radius:50%;background:#4ade80;flex:none}
+.dot.off{background:#f87171}
+main{flex:1;padding:14px;max-width:980px;width:100%;margin:0 auto}
+.card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:12px}
+.card h2{margin:0 0 10px;font-size:17px}
+.row{display:flex;gap:10px;align-items:center}
+.row>*{flex:1}
+.mut{color:var(--mut);font-size:13px}
+.big{font-size:30px;font-weight:800;letter-spacing:1px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700}
+.pill.ok{background:var(--okbg);color:var(--ok)}.pill.warn{background:var(--warnbg);color:var(--warn)}.pill.err{background:var(--errbg);color:var(--err)}.pill.info{background:var(--infobg);color:var(--info)}.pill.gray{background:#e5e9f0;color:var(--mut)}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.list li:first-child{border-top:0}
+.code{font-family:ui-monospace,Menlo,Consolas,monospace}
+.code b{font-size:20px}
+.ic{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex:none;font-size:18px}
+.ic.ok{background:var(--okbg);color:var(--ok)}.ic.wait{background:#e5e9f0;color:var(--mut)}.ic.warn{background:var(--warnbg);color:var(--warn)}.ic.err{background:var(--errbg);color:var(--err)}.ic.info{background:var(--infobg);color:var(--info)}
+.bar{height:8px;background:#e5e9f0;border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok)}
+.job{display:flex;align-items:center;gap:12px;padding:12px;border:2px solid var(--line);border-radius:var(--r);background:#fff;margin-bottom:10px;cursor:pointer;width:100%;text-align:left;color:var(--txt);font-weight:500;min-height:0}
+.job .t{font-size:20px;font-weight:800;min-width:56px;color:var(--navy)}
+.job .b{flex:1}
+.toast{position:fixed;left:50%;top:64px;transform:translateX(-50%);background:#17202b;color:#fff;padding:12px 18px;border-radius:12px;font-weight:600;z-index:50;max-width:92vw;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.3);animation:up .2s}
+.toast.ok{background:var(--ok)}.toast.warn{background:var(--warn)}.toast.err{background:var(--err)}
+@keyframes up{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+.overlay{position:fixed;inset:0;background:rgba(10,20,40,.55);display:flex;align-items:flex-end;justify-content:center;z-index:40}
+.sheet{background:#fff;width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:18px 16px 24px;max-height:85vh;overflow:auto}
+.sheet h3{margin:0 0 8px;font-size:19px}
+.sheet .btns{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.scanbar{position:sticky;bottom:0;background:var(--bg);padding:10px 0 6px;z-index:4}
+.scanbar .row input{font-size:18px;font-family:ui-monospace,Menlo,Consolas,monospace;border-color:var(--navy)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tabs button{background:#fff;color:var(--navy);border:2px solid var(--line);padding:8px 14px;min-height:40px;font-size:14px}
+.tabs button.on{border-color:var(--navy);background:var(--navy);color:#fff}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase}
+td.n,th.n{text-align:right}
+.tw{overflow:auto}
+.center{text-align:center}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.kpi div{background:#fff;border-radius:var(--r);padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.kpi b{display:block;font-size:26px}
+.kpi span{color:var(--mut);font-size:12px}
+.banner{padding:10px 12px;border-radius:var(--r);margin-bottom:10px;font-size:14px;font-weight:600}
+.banner.info{background:var(--infobg);color:#1e40af}.banner.warn{background:var(--warnbg);color:#92400e}.banner.ok{background:var(--okbg);color:#166534}.banner.err{background:var(--errbg);color:#991b1b}
+.login{max-width:380px;margin:40px auto}
+.login .logo{text-align:center;margin-bottom:20px}
+.login .logo svg{width:84px;height:84px}
+.hide{display:none}
+small.ver{display:block;text-align:center;color:var(--mut);padding:10px;font-size:11px}
+@media (min-width:700px){.sheet{border-radius:18px;margin-bottom:10vh}.overlay{align-items:center}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toasts"></div>
+<div id="modal"></div>
+
+<script type="module">
+const CFG = window.INV_CONFIG || {demo:true};
+const VER = '1.0';
+const $ = (s, el=document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtT = t => t ? new Date(t).toLocaleString('ro-RO', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+const slug = s => String(s||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'.').replace(/^\.|\.$/g,'');
+const safeKey = s => String(s).replace(/[.#$\/\[\]]/g,'_');
+const ZONE = 'ZONE';
+const ZONE_RE = /^(WCD|WR2|WIO|WB2|WBP)$/i;
+const LOC_RE = /^A\d{8}$/i;
+const aisleOf = loc => LOC_RE.test(loc) ? loc.slice(0,3).toUpperCase() : ZONE;
+const isLoc = c => LOC_RE.test(c) || ZONE_RE.test(c);
+const aisleName = a => a === ZONE ? 'Zone fără locație' : 'Aleea ' + a;
+
+// ------------------------------------------------------------------ DB layer (Cloud Firestore sau demo local)
+let DB;
+function makeDemoDB(){
+  const KEY = 'inv-lcw-demo-v1';
+  let tree = {};
+  try { tree = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { tree = {}; }
+  let memStoc = {};   // stocul demo nu se salvează în localStorage (prea mare) — vine din demo-stoc.js sau din import
+  const listeners = new Set();
+  const parts = p => p.split('/').filter(Boolean);
+  const isStoc = pp => pp[0]==='inv' && pp[2]==='stoc';
+  function getAt(pp){
+    if (isStoc(pp)) { let n = memStoc[pp[1]]; for (const k of pp.slice(3)) { if (n==null) return null; n = n[k]; } return n ?? null; }
+    let n = tree; for (const k of pp) { if (n==null || typeof n!=='object') return null; n = n[k]; } return n ?? null;
+  }
+  function setAt(pp, val){
+    let root = tree, start = 0;
+    if (isStoc(pp)) { memStoc[pp[1]] = memStoc[pp[1]] || {}; root = memStoc[pp[1]]; start = 3; if (pp.length===3) { memStoc[pp[1]] = val || {}; return; } }
+    let n = root;
+    for (let i=start;i<pp.length-1;i++){ if (n[pp[i]]==null || typeof n[pp[i]]!=='object') n[pp[i]] = {}; n = n[pp[i]]; }
+    const last = pp[pp.length-1];
+    if (val===null || val===undefined) delete n[last]; else n[last] = val;
+  }
+  function persist(){ try { localStorage.setItem(KEY, JSON.stringify(tree)); } catch(e) { console.warn('localStorage plin', e); } }
+  let pending = false;
+  function notify(){ if (pending) return; pending = true; queueMicrotask(()=>{ pending=false; for (const l of listeners) l.fire(); }); }
+  // stoc demo inițial (din demo-stoc.js); stocul importat în demo trăiește doar în memorie
+  if (window.DEMO_STOC) {
+    const stoc = {}, alei = {};
+    for (const r of window.DEMO_STOC) { const a = aisleOf(r[1]); stoc[r[0]] = {a, l: r[1], z: r[2], q: r[3], d: r[4], s: r[5], b: r[6]}; alei[a] = alei[a] || {cutii:0, locs:new Set()}; alei[a].cutii++; alei[a].locs.add(r[1]); }
+    for (const a of Object.keys(alei)) alei[a] = {cutii: alei[a].cutii, locs: alei[a].locs.size};
+    memStoc.demo = stoc;
+    const base = {nume: 'Demo RO-LCWOFF (stoc din fișier)', creat: getAt(['inv','demo','meta','creat']) || Date.now(), de: 'demo', n: Object.keys(stoc).length};
+    if (!getAt(['inv','demo','meta'])) setAt(['inv','demo','meta'], {...base, alei, prog: {}});
+    else setAt(['inv','demo','meta','alei'], alei);
+    setAt(['lista','demo'], base);
+    const activ = getAt(['activ']);
+    if (!activ || !memStoc[activ]) setAt(['activ'], 'demo');
+    persist();
+  }
+  function filterVal(v, f){
+    if (!f || !v || typeof v!=='object') return v;
+    const o = {}; for (const [k,x] of Object.entries(v)) if (x && x[f.child]===f.equals) o[k]=x; return o;
+  }
+  return {
+    demo: true,
+    async get(path){ const v = getAt(parts(path)); return v==null ? null : JSON.parse(JSON.stringify(v)); },
+    async set(path, val){ setAt(parts(path), val==null?null:JSON.parse(JSON.stringify(val))); persist(); notify(); },
+    async update(base, obj){ for (const [k,v] of Object.entries(obj)) setAt(parts(base+'/'+k), v==null?null:JSON.parse(JSON.stringify(v))); persist(); notify(); },
+    listen(path, cb, f){
+      const l = { fire(){ cb(filterVal(getAt(parts(path)), f) || {}); } };
+      listeners.add(l); queueMicrotask(()=>l.fire());
+      return () => listeners.delete(l);
+    },
+    onConn(cb){ cb(true); },
+    auth: {
+      async login(name, pin){ if (!name || !pin) throw new Error('Completează numele și PIN-ul.'); return {nume: name.trim(), slug: slug(name)}; },
+      async logout(){},
+      async createUser(){ throw new Error('În modul demo nu se creează conturi — orice nume + PIN funcționează.'); }
+    },
+    async resetAll(){ localStorage.removeItem(KEY); location.reload(); }
+  };
+}
+
+async function makeFirebaseDB(){
+  // Firestore. Căile logice ale aplicației (inv/{id}/stoc/{sscc}, activ, lista, utilizatori) sunt traduse în
+  // colecții prefixate (CFG.prefix, implicit "lcw_") ca să poată sta în același proiect Firebase cu alte aplicații.
+  const [{initializeApp, getApps}, A, F] = await Promise.all([
+    import('https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js'),
+    import('https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js'),
+    import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js')
+  ]);
+  const app = initializeApp(CFG.firebase);
+  const auth = A.getAuth(app);
+  let db;
+  try { db = F.initializeFirestore(app, {localCache: F.persistentLocalCache({tabManager: F.persistentMultipleTabManager()})}); }
+  catch(e) { console.warn('cache local indisponibil', e); db = F.getFirestore(app); }
+  const PX = CFG.prefix ?? 'lcw_';
+  const COL = {inv: PX + 'inventare', cfg: PX + 'config', users: PX + 'utilizatori'};
+  const email = n => slug(n) + '@' + (CFG.domeniuEmail || 'inventar-lcw.app');
+  const pw = pin => 'PIN' + String(pin).trim();   // Firebase cere min. 6 caractere; așa merg și PIN-uri de 4 cifre
+  const seg = p => p.split('/').filter(Boolean);
+  // resolve: {kind:'doc'|'col'|'activ'|'invroot', ref, sub:[...câmpuri imbricate în doc]}
+  function R(path){
+    const s = seg(path);
+    if (s[0]==='activ') return {kind:'activ', ref: F.doc(db, COL.cfg, 'activ')};
+    if (s[0]==='lista') return s[1] ? {kind:'doc', ref: F.doc(db, COL.inv, s[1]), sub: s.slice(2)} : {kind:'col', ref: F.collection(db, COL.inv)};
+    if (s[0]==='utilizatori') return s[1] ? {kind:'doc', ref: F.doc(db, COL.users, s[1]), sub: []} : {kind:'col', ref: F.collection(db, COL.users)};
+    if (s[0]==='inv') {
+      const id = s[1];
+      if (s.length===2) return {kind:'invroot', id, ref: F.doc(db, COL.inv, id)};
+      if (s[2]==='meta') return {kind:'doc', ref: F.doc(db, COL.inv, id), sub: s.slice(3)};
+      const col = F.collection(db, COL.inv, id, s[2]);
+      return s[3] ? {kind:'doc', ref: F.doc(col, s[3]), sub: s.slice(4)} : {kind:'col', ref: col};
+    }
+    throw new Error('Cale necunoscută: ' + path);
+  }
+  const nest = (sub, val) => sub.reduceRight((acc, k) => ({[k]: acc}), val);
+  const pick = (obj, sub) => sub.reduce((o, k) => (o==null ? null : o[k]), obj) ?? null;
+  const colMap = snap => { const o = {}; snap.forEach(d => o[d.id] = d.data()); return o; };
+  async function deleteCol(colRef){
+    for (;;) { const snap = await F.getDocs(F.query(colRef, F.limit(400))); if (snap.empty) break; const b = F.writeBatch(db); snap.forEach(d => b.delete(d.ref)); await b.commit(); }
+  }
+  async function writeDoc(r, val){
+    if (val === null || val === undefined) { if (r.sub && r.sub.length) await F.setDoc(r.ref, nest(r.sub, F.deleteField()), {merge:true}); else await F.deleteDoc(r.ref); }
+    else if (r.sub && r.sub.length) await F.setDoc(r.ref, nest(r.sub, val), {merge:true});
+    else await F.setDoc(r.ref, val);
+  }
+  const onErr = err => { console.error(err); toast('Eroare citire: ' + (err.code||err.message), 'err', 4000); };
+  return {
+    demo: false,
+    async get(path){
+      const r = R(path);
+      if (r.kind==='activ') { const s = await F.getDoc(r.ref); return s.exists() ? (s.data().id ?? null) : null; }
+      if (r.kind==='col') return colMap(await F.getDocs(r.ref));
+      const s = await F.getDoc(r.ref); if (!s.exists()) return null; return r.sub.length ? pick(s.data(), r.sub) : s.data();
+    },
+    async set(path, val){
+      const r = R(path);
+      if (r.kind==='activ') return F.setDoc(r.ref, {id: val ?? null});
+      if (r.kind==='invroot') { if (val===null) { await deleteCol(F.collection(r.ref, 'stoc')); await deleteCol(F.collection(r.ref, 'scan')); await deleteCol(F.collection(r.ref, 'extra')); await deleteCol(F.collection(r.ref, 'noi')); await deleteCol(F.collection(r.ref, 'loc')); await F.deleteDoc(r.ref); } return; }
+      if (r.kind==='col') throw new Error('set pe colecție');
+      return writeDoc(r, val);
+    },
+    async update(base, obj){
+      // scrieri multiple (ca la RTDB multi-path update): grupate în batch-uri de max 450 operații
+      const ops = Object.entries(obj).map(([k, v]) => ({r: R(base + '/' + k), v}));
+      for (let i = 0; i < ops.length; i += 450) {
+        const b = F.writeBatch(db);
+        for (const {r, v} of ops.slice(i, i + 450)) {
+          if (r.kind==='activ') b.set(r.ref, {id: v ?? null});
+          else if (v === null || v === undefined) { if (r.sub.length) b.set(r.ref, nest(r.sub, F.deleteField()), {merge:true}); else b.delete(r.ref); }
+          else if (r.sub.length) b.set(r.ref, nest(r.sub, v), {merge:true});
+          else b.set(r.ref, v);
+        }
+        await b.commit();
+      }
+    },
+    listen(path, cb, f){
+      const r = R(path);
+      if (r.kind==='activ') return F.onSnapshot(r.ref, s => cb(s.exists() ? (s.data().id ?? {}) : {}), onErr);
+      if (r.kind==='col') { const q = f ? F.query(r.ref, F.where(f.child, '==', f.equals)) : r.ref; return F.onSnapshot(q, s => cb(colMap(s)), onErr); }
+      return F.onSnapshot(r.ref, s => cb(s.exists() ? (r.sub.length ? (pick(s.data(), r.sub) || {}) : s.data()) : {}), onErr);
+    },
+    onConn(cb){ cb(navigator.onLine); window.addEventListener('online', () => cb(true)); window.addEventListener('offline', () => cb(false)); },
+    auth: {
+      waitUser(){ return new Promise(res => { const un = A.onAuthStateChanged(auth, u => { un(); res(u); }); }); },
+      async login(name, pin){
+        try { const c = await A.signInWithEmailAndPassword(auth, email(name), pw(pin)); return {nume: name.trim(), slug: slug(name), uid: c.user.uid}; }
+        catch(e){ throw new Error(/invalid|wrong|not-found|credential/i.test(e.code||'') ? 'Nume sau PIN greșit.' : e.message); }
+      },
+      async logout(){ await A.signOut(auth); },
+      async createUser(name, pin){
+        // aplicație secundară ca să nu pierdem sesiunea adminului
+        const sec = getApps().find(a => a.name==='sec') || initializeApp(CFG.firebase, 'sec');
+        const sa = A.getAuth(sec);
+        await A.createUserWithEmailAndPassword(sa, email(name), pw(pin));
+        await A.signOut(sa);
+      },
+      current(){ return auth.currentUser; }
+    }
+  };
+}
+
+// ------------------------------------------------------------------ State
+const S = {
+  user: null, admin: false, screen: 'login',
+  invId: null, meta: null, invs: {},
+  alee: null, stoc: {}, scan: {}, extra: {}, noi: {}, loc: {},
+  locIndex: {}, locsSorted: [],
+  curLoc: null, recent: [], unsub: [], conn: true, kbd: false,
+  adminTab: 'dash', all: null, allUnsub: [], progress: null
+};
+const P = () => 'inv/' + S.invId + '/';
+
+// ------------------------------------------------------------------ UI helpers
+function toast(msg, kind='', ms=2200){
+  const t = document.createElement('div'); t.className = 'toast ' + kind; t.textContent = msg;
+  $('#toasts').innerHTML = ''; $('#toasts').appendChild(t);
+  setTimeout(() => { if (t.parentNode) t.remove(); }, ms);
+}
+let actx;
+function beep(kind){
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const seq = kind==='ok' ? [[880,.08]] : kind==='warn' ? [[660,.09],[660,.09]] : [[220,.3]];
+    let t = actx.currentTime;
+    for (const [f,d] of seq){ const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = f; o.connect(g); g.connect(actx.destination); g.gain.setValueAtTime(.25,t); o.start(t); o.stop(t+d); t += d + .05; }
+  } catch {}
+  try { navigator.vibrate && navigator.vibrate(kind==='ok' ? 60 : kind==='warn' ? [60,60,60] : [200,80,200]); } catch {}
+}
+function ask(title, html, buttons){
+  // buttons: [{label, cls, val}]
+  return new Promise(res => {
+    $('#modal').innerHTML = `<div class="overlay"><div class="sheet"><h3>${esc(title)}</h3><div>${html}</div><div class="btns">${buttons.map((b,i)=>`<button class="${b.cls||''}" data-i="${i}">${esc(b.label)}</button>`).join('')}</div></div></div>`;
+    $('#modal').onclick = e => { const b = e.target.closest('button[data-i]'); if (!b) return; $('#modal').innerHTML=''; res(buttons[+b.dataset.i].val); };
+  });
+}
+
+// ------------------------------------------------------------------ Render
+function render(){
+  const app = $('#app');
+  if (S.screen==='login') return app.innerHTML = viewLogin();
+  const keep = $('#scanIn')?.value || '';
+  const head = `<header><span class="dot ${S.conn?'':'off'}" title="${S.conn?'Conectat':'Fără conexiune'}"></span>
+    <h1>${esc(CFG.titlu||'Inventar')}<div class="sub">${esc(S.meta?.nume || 'fără inventar activ')} · ${esc(S.user.nume)}</div></h1>
+    ${S.screen==='count' ? `<button data-a="jobs">Alei</button>` : ''}
+    ${S.admin && S.screen!=='admin' ? `<button data-a="admin">Admin</button>` : ''}
+    ${S.screen==='admin' ? `<button data-a="jobs">PDA</button>` : ''}
+    <button data-a="logout">Ieși</button></header>`;
+  let body = S.screen==='jobs' ? viewJobs() : S.screen==='count' ? viewCount() : viewAdmin();
+  app.innerHTML = head + `<main>${body}</main><small class="ver">Inventar LCW v${VER}${DB.demo?' · DEMO (date locale în browser)':''}</small>`;
+  const si = $('#scanIn'); if (si && keep) si.value = keep;
+  if (S.screen==='count') focusScan();
+}
+
+function viewLogin(){
+  return `<main><div class="login card"><div class="logo"><img src="icon.svg" alt="" style="width:84px;height:84px"><h2 class="center">${esc(CFG.titlu||'Inventar')}</h2><div class="mut center">${esc(CFG.client||'')}${DB.demo?' · mod demo':''}</div></div>
+  <form id="loginF"><label class="mut">Nume</label><input id="lName" autocomplete="username" autocapitalize="off" placeholder="ex. adrian" required style="margin:6px 0 12px">
+  <label class="mut">PIN</label><input id="lPin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="PIN" required style="margin:6px 0 16px">
+  <button type="submit" style="width:100%">Intră</button>
+  <div id="lErr" class="banner err hide" style="margin-top:12px"></div></form>
+  ${DB.demo?'<p class="mut center">Demo: orice nume + PIN. Numele <b>adrian</b> sau <b>admin</b> deschid și panoul de administrare.</p>':''}
+  </div></main>`;
+}
+
+function aisleStats(){
+  // din S.all (admin) sau din datele job-ului curent
+  const src = S.all || {stoc:S.stoc, scan:S.scan, loc:S.loc, noi:S.noi};
+  const st = {};
+  const g = a => st[a] = st[a] || {a, cutii:0, gasite:0, mutate:0, lipsa:0, nenum:0, locs:new Set(), locsDone:0, noi:0, users:{}};
+  for (const [k,v] of Object.entries(src.stoc||{})) { const s = g(v.a); s.cutii++; s.locs.add(v.l); const sc = (src.scan||{})[k]; if (sc) { if (sc.m) s.mutate++; else s.gasite++; } else if ((src.loc||{})[v.l]) s.lipsa++; else s.nenum++; }
+  for (const v of Object.values(src.loc||{})) { const s = g(v.a); s.locsDone++; }
+  for (const v of Object.values(src.noi||{})) { const s = g(v.a); s.noi++; }
+  for (const v of Object.values(src.scan||{})) { const s = g(v.a); s.users[v.u] = (s.users[v.u]||0)+1; }
+  for (const s of Object.values(st)) { s.nlocs = s.locs.size; delete s.locs; }
+  return st;
+}
+function viewJobs(){
+  const st = S.meta?.alei || {};
+  const keys = Object.keys(st).sort((a,b)=> a===ZONE?1:b===ZONE?-1:a.localeCompare(b));
+  if (!S.invId) return `<div class="card"><h2>Niciun inventar activ</h2><p>Un administrator trebuie să importe stocul (Admin → Import stoc).</p></div>`;
+  const prog = S.meta?.prog || {};
+  return `<div class="card"><h2>Alege aleea de numărat</h2><p class="mut">Echipa: <b>${esc(S.user.nume)}</b>. Progresul se actualizează pe măsură ce echipele numără. Poți scana direct o etichetă de locație și aplicația sare la aleea ei.</p></div>
+  ${keys.map(a => { const x = st[a]; const p = prog[a] || {}; const pct = x.cutii ? Math.round(100*(p.scan||0)/x.cutii) : 0;
+    return `<button class="job" data-alee="${a}"><span class="t">${a===ZONE?'Zone':a}</span><span class="b"><div>${esc(aisleName(a))}${a===ZONE?' <span class="mut">(WCD, WR2, WIO)</span>':''}</div><div class="mut">${x.cutii} cutii · ${x.locs} locații · ${p.locs||0} numărate</div><div class="bar" style="margin-top:6px"><i style="width:${pct}%"></i></div></span><span class="pill ${pct>=100?'ok':pct>0?'info':'gray'}">${pct}%</span></button>`; }).join('')}
+  <div class="scanbar"><div class="row"><input id="scanIn" placeholder="Scanează o locație…" autocomplete="off" inputmode="${S.kbd?'text':'none'}"><button class="sec" data-a="kbd" style="flex:0 0 auto">${S.kbd?'⌨︎ on':'⌨︎'}</button></div></div>`;
+}
+
+function locData(loc){
+  const expected = (S.locIndex[loc] || []).slice().sort();
+  const items = expected.map(k => { const sc = S.scan[k]; return {k, st: S.stoc[k], sc, state: !sc ? 'wait' : sc.l===loc ? 'ok' : 'else'}; });
+  const extras = Object.entries(S.extra).filter(([k,v]) => v.l===loc).map(([k,v]) => ({k, v}));
+  const noi = Object.entries(S.noi).filter(([k,v]) => v.l===loc).map(([k,v]) => ({k, v}));
+  const missing = items.filter(i => i.state==='wait');
+  return {expected, items, extras, noi, missing, found: items.filter(i=>i.state==='ok')};
+}
+function nextLoc(from){
+  const i = from ? S.locsSorted.indexOf(from) : -1;
+  for (let j=i+1;j<S.locsSorted.length;j++) if (!S.loc[S.locsSorted[j]]) return S.locsSorted[j];
+  for (let j=0;j<=i && j<S.locsSorted.length;j++) if (!S.loc[S.locsSorted[j]]) return S.locsSorted[j];
+  return null;
+}
+function viewCount(){
+  const st = aisleStats()[S.alee] || {cutii:0,gasite:0,mutate:0,lipsa:0,nenum:0,nlocs:0,locsDone:0,noi:0};
+  const scanned = st.gasite + st.mutate;
+  let body = `<div class="card" style="padding:10px 14px"><div class="row"><div><b>${esc(aisleName(S.alee))}</b><div class="mut">${scanned}/${st.cutii} cutii · ${st.locsDone}/${st.nlocs} locații</div></div><div style="flex:0 0 120px" class="bar"><i style="width:${st.cutii?Math.round(100*scanned/st.cutii):0}%"></i></div></div></div>`;
+  if (!S.curLoc) {
+    const nx = nextLoc(null);
+    body += `<div class="card center"><div class="mut">Scanează eticheta locației de la raft</div><div class="big" style="color:var(--mut);margin:10px 0">— — —</div>${nx?`<div class="mut">Prima locație nenumărată: <b class="code">${nx}</b> (${(S.locIndex[nx]||[]).length} cutii) <button class="ghost" data-goloc="${nx}">deschide</button></div>`:'<div class="pill ok">Toate locațiile aleii sunt numărate</div>'}</div>`;
+  } else {
+    const d = locData(S.curLoc); const done = S.loc[S.curLoc];
+    const nx = nextLoc(S.curLoc);
+    body += `<div class="card"><div class="row"><div><div class="mut">Locația curentă</div><div class="big">${esc(S.curLoc)}</div></div><div style="flex:0 0 auto" class="center"><div class="big" style="font-size:26px">${d.found.length}/${d.expected.length}</div><div class="mut">găsite</div></div></div>
+      ${done?`<div class="banner ${done.lipsa?'warn':'ok'}" style="margin-top:8px">Numărată de ${esc(done.u)} la ${fmtT(done.t)}${done.lipsa?` · ${done.lipsa} lipsă confirmate`:''}. Poți continua scanarea.</div>`:''}
+      ${d.expected.length===0?`<div class="banner info" style="margin-top:8px">Scriptic locația e goală. Orice cutie scanată aici va fi marcată ca mutată sau nouă.</div>`:''}
+      <ul class="list" style="margin-top:6px">
+      ${d.items.map(i => `<li><span class="ic ${i.state==='ok'?'ok':i.state==='else'?'warn':'wait'}">${i.state==='ok'?'✓':i.state==='else'?'↗':'·'}</span><span style="flex:1"><span class="code">${esc(i.k.slice(0,-6))}<b>${esc(i.k.slice(-6))}</b></span><div class="mut">${esc(i.st.z)} · ${esc(i.st.q)}${i.state==='else'?` · <span style="color:var(--warn)">scanată la ${esc(i.sc.l)} de ${esc(i.sc.u)}</span>`:''}</div></span></li>`).join('')}
+      ${d.extras.map(x => `<li><span class="ic warn">↙</span><span style="flex:1"><span class="code">${esc(x.k.slice(0,-6))}<b>${esc(x.k.slice(-6))}</b></span><div class="mut" style="color:var(--warn)">mutată aici · scriptic la ${esc(x.v.ls)}</div></span></li>`).join('')}
+      ${d.noi.map(x => `<li><span class="ic info">+</span><span style="flex:1"><span class="code">${esc(x.k.slice(0,-6))}<b>${esc(x.k.slice(-6))}</b></span><div class="mut" style="color:var(--info)">cutie nouă (nu era în stoc)</div></span></li>`).join('')}
+      </ul>
+      <div class="row" style="margin-top:12px"><button class="ok" data-a="done">Locație gata ✓</button>${S.recent.length?`<button class="sec" data-a="undo" style="flex:0 0 auto">Anulează ultima</button>`:''}</div>
+      ${nx?`<div class="mut center" style="margin-top:10px">Următoarea nenumărată: <b class="code">${nx}</b> (${(S.locIndex[nx]||[]).length} cutii)</div>`:''}
+    </div>`;
+  }
+  body += `<div class="scanbar"><div class="row"><input id="scanIn" placeholder="${S.curLoc?'Scanează cutii sau următoarea locație…':'Scanează locația…'}" autocomplete="off" inputmode="${S.kbd?'text':'none'}"><button class="sec" data-a="kbd" style="flex:0 0 auto" title="Tastatură">${S.kbd?'⌨︎ on':'⌨︎'}</button></div></div>`;
+  return body;
+}
+
+function viewAdmin(){
+  const tabs = [['dash','Progres'],['import','Import stoc'],['export','Raport Excel'],['users','Utilizatori'],['inv','Inventare']];
+  let b = `<div class="tabs">${tabs.map(([k,l])=>`<button class="${S.adminTab===k?'on':''}" data-tab="${k}">${l}</button>`).join('')}</div>`;
+  if (S.adminTab==='dash') {
+    if (!S.all) return b + `<div class="card">Se încarcă datele inventarului…</div>`;
+    const st = aisleStats(); const keys = Object.keys(st).sort((a,b)=> a===ZONE?1:b===ZONE?-1:a.localeCompare(b));
+    const tot = {cutii:0,gasite:0,mutate:0,lipsa:0,nenum:0,nlocs:0,locsDone:0,noi:0};
+    for (const s of Object.values(st)) for (const k of Object.keys(tot)) tot[k]+=s[k];
+    const users = {}; for (const v of Object.values(S.all.scan||{})) { users[v.u] = users[v.u] || {n:0,last:0}; users[v.u].n++; users[v.u].last = Math.max(users[v.u].last, v.t||0); }
+    for (const v of Object.values(S.all.noi||{})) { users[v.u] = users[v.u] || {n:0,last:0}; users[v.u].n++; users[v.u].last = Math.max(users[v.u].last, v.t||0); }
+    b += `<div class="kpi"><div><b>${tot.cutii}</b><span>cutii scriptic</span></div><div><b style="color:var(--ok)">${tot.gasite}</b><span>găsite la loc</span></div><div><b style="color:var(--warn)">${tot.mutate}</b><span>găsite în altă locație</span></div><div><b style="color:var(--err)">${tot.lipsa}</b><span>lipsă (locații numărate)</span></div><div><b style="color:var(--mut)">${tot.nenum}</b><span>nenumărate încă</span></div><div><b style="color:var(--info)">${tot.noi}</b><span>cutii noi (în plus)</span></div><div><b>${tot.locsDone}/${tot.nlocs}</b><span>locații numărate</span></div></div>
+    <div class="card" style="margin-top:12px"><h2>Pe alei</h2><div class="tw"><table><tr><th>Alee</th><th class="n">Cutii</th><th class="n">Găsite</th><th class="n">Mutate</th><th class="n">Lipsă</th><th class="n">Nenum.</th><th class="n">Noi</th><th class="n">Locații</th><th>Progres</th><th>Echipe</th></tr>
+    ${keys.map(a=>{const s=st[a];const pct=s.cutii?Math.round(100*(s.gasite+s.mutate)/s.cutii):0;return `<tr><td><b>${a===ZONE?'Zone':a}</b></td><td class="n">${s.cutii}</td><td class="n">${s.gasite}</td><td class="n">${s.mutate}</td><td class="n" style="color:var(--err)">${s.lipsa}</td><td class="n">${s.nenum}</td><td class="n">${s.noi}</td><td class="n">${s.locsDone}/${s.nlocs}</td><td style="min-width:120px"><div class="bar"><i style="width:${pct}%"></i></div><span class="mut">${pct}%</span></td><td class="mut">${esc(Object.entries(s.users).map(([u,n])=>`${u} (${n})`).join(', '))}</td></tr>`}).join('')}</table></div></div>
+    <div class="card"><h2>Echipe</h2><div class="tw"><table><tr><th>Utilizator</th><th class="n">Scanări</th><th>Ultima scanare</th></tr>${Object.entries(users).sort((a,b)=>b[1].n-a[1].n).map(([u,x])=>`<tr><td>${esc(u)}</td><td class="n">${x.n}</td><td>${fmtT(x.last)}</td></tr>`).join('')||'<tr><td colspan=3 class="mut">Nicio scanare încă</td></tr>'}</table></div></div>`;
+  } else if (S.adminTab==='import') {
+    b += `<div class="card"><h2>Import stoc (inventar nou)</h2><p class="mut">Încarcă exportul WMS <b>RO-LCWOFF_View_Item</b> (.xlsx). Se folosesc coloanele <i>Item Number / SSCC</i>, <i>Storage Loc.</i>, <i>WH Area ID</i>, <i>Quality Lot</i>, <i>Arrival</i>, <i>Status</i>, <i>Batch</i>. Importul creează un inventar nou și îl face activ pe toate PDA-urile.</p>
+    <label class="mut">Denumire inventar</label><input id="impName" placeholder="ex. Inventar LCW ${new Date().toLocaleDateString('ro-RO')}" style="margin:6px 0 12px">
+    <input type="file" id="impFile" accept=".xlsx,.xls,.csv" style="margin-bottom:12px">
+    <button id="impGo">Importă stocul</button>
+    <div id="impMsg" style="margin-top:12px"></div></div>`;
+  } else if (S.adminTab==='export') {
+    b += `<div class="card"><h2>Raport Excel scriptic vs. fizic</h2><p class="mut">Fișierul conține: <b>Stoc</b> (fiecare cutie cu status Găsit / Mutat / Lipsă / Nenumărat, locația fizică, cine și când a scanat), <b>Cutii noi</b> (scanate dar inexistente în stoc), <b>Locații</b> (numărate, de cine, lipsuri confirmate) și <b>Sumar alei</b>. Coloanele au filtru.</p>
+    <button id="expGo" ${S.all?'':'disabled'}>Descarcă raportul (.xlsx)</button> <span class="mut" id="expMsg">${S.all?'':'Se încarcă datele…'}</span></div>`;
+  } else if (S.adminTab==='users') {
+    b += `<div class="card"><h2>Utilizatori (echipe)</h2><p class="mut">Fiecare echipă intră cu nume + PIN. ${DB.demo?'În modul demo orice nume + PIN funcționează; conturile reale se creează după conectarea la Firebase.':'Contul se creează în Firebase Authentication ca <i>nume@'+esc(CFG.domeniuEmail||'')+'</i>; PIN-ul poate avea 4–8 cifre. Ștergerea se face din consola Firebase.'}</p>
+    <div class="row"><input id="uName" placeholder="nume (ex. echipa1)" autocapitalize="off"><input id="uPin" placeholder="PIN" inputmode="numeric"><button id="uGo" style="flex:0 0 auto">Creează</button></div><div id="uMsg" style="margin-top:10px"></div>
+    <div class="tw" style="margin-top:12px"><table><tr><th>Nume</th><th>Creat</th></tr>${Object.values(S.users||{}).map(u=>`<tr><td>${esc(u.nume)}</td><td>${fmtT(u.creat)}</td></tr>`).join('')||'<tr><td colspan=2 class="mut">—</td></tr>'}</table></div>
+    <p class="mut">Administratori (din config.js): ${esc((CFG.admini||[]).join(', '))}</p></div>`;
+  } else if (S.adminTab==='inv') {
+    b += `<div class="card"><h2>Inventare</h2><div class="tw"><table><tr><th>Denumire</th><th class="n">Cutii</th><th>Creat</th><th>De</th><th></th></tr>${Object.entries(S.invs).sort((a,b)=>(b[1].creat||0)-(a[1].creat||0)).map(([id,m])=>`<tr><td>${esc(m.nume)} ${id===S.invId?'<span class="pill ok">activ</span>':''}</td><td class="n">${m.n||''}</td><td>${fmtT(m.creat)}</td><td>${esc(m.de||'')}</td><td>${id!==S.invId?`<button class="ghost" data-activ="${id}">Activează</button>`:''}<button class="ghost" style="color:var(--err)" data-del="${id}">Șterge</button></td></tr>`).join('')||'<tr><td colspan=5 class="mut">—</td></tr>'}</table></div>
+    ${DB.demo?'<p class="mut">Demo: <button class="ghost" id="demoReset">Șterge progresul demo din acest browser</button></p>':''}</div>`;
+  }
+  return b;
+}
+
+// ------------------------------------------------------------------ Data subscriptions
+function unsubAll(list){ for (const u of list) try { u(); } catch {} list.length = 0; }
+function rebuildIndex(){
+  const idx = {}; for (const [k,v] of Object.entries(S.stoc)) (idx[v.l] = idx[v.l] || []).push(k);
+  S.locIndex = idx; S.locsSorted = Object.keys(idx).sort();
+}
+const adminCanRender = () => S.screen==='admin' && ['dash','export','inv'].includes(S.adminTab);
+async function loadActive(){
+  // inventarul activ + meta lui (alei, progres) + lista inventarelor
+  S.unsubActiv && S.unsubActiv();
+  S.unsubActiv = DB.listen('activ', id => {
+    if (id && typeof id==='object') id = null;
+    if (id === S.invId && S.unsubMeta) return;
+    S.invId = id || null; S.alee = null; S.curLoc = null; unsubAll(S.unsub); S.stoc={};S.scan={};S.extra={};S.noi={};S.loc={}; rebuildIndex();
+    if (S.screen==='count') S.screen='jobs';
+    if (S.all || S.screen==='admin') subscribeAll();
+    S.unsubMeta && S.unsubMeta(); S.unsubMeta = null; S.meta = null;
+    if (S.invId) S.unsubMeta = DB.listen('inv/'+S.invId+'/meta', m => { S.meta = (m && m.nume) ? m : null; if (S.screen==='jobs' || adminCanRender()) render(); });
+    if (S.screen!=='admin' || adminCanRender()) render();
+  });
+  S.unsubInvs && S.unsubInvs();
+  S.unsubInvs = DB.listen('lista', v => { S.invs = v || {}; if (adminCanRender()) render(); });
+}
+function subscribeAisle(alee){
+  unsubAll(S.unsub); S.alee = alee; S.stoc={};S.scan={};S.extra={};S.noi={};S.loc={}; rebuildIndex();
+  const f = {child:'a', equals:alee};
+  S.unsub.push(DB.listen(P()+'stoc', v => { S.stoc = v; rebuildIndex(); if (S.screen==='count') render(); }, f));
+  S.unsub.push(DB.listen(P()+'scan', v => { S.scan = v; if (S.screen==='count') render(); }, f));
+  S.unsub.push(DB.listen(P()+'extra', v => { S.extra = v; if (S.screen==='count') render(); }, f));
+  S.unsub.push(DB.listen(P()+'noi', v => { S.noi = v; if (S.screen==='count') render(); }, f));
+  S.unsub.push(DB.listen(P()+'loc', v => { S.loc = v; if (S.screen==='count') render(); }, f));
+}
+function subscribeAll(){
+  unsubAll(S.allUnsub); S.all = null;
+  if (!S.invId) { render(); return; }
+  const all = {stoc:{}, scan:{}, extra:{}, noi:{}, loc:{}}; let got = 0;
+  for (const k of Object.keys(all)) S.allUnsub.push(DB.listen(P()+k, v => { all[k] = v; got |= 1; S.all = all; if (adminCanRender()) render(); }));
+  S.unsubUsers && S.unsubUsers();
+  S.unsubUsers = DB.listen('utilizatori', v => { S.users = v; if (S.screen==='admin' && S.adminTab==='users') render(); });
+}
+
+// ------------------------------------------------------------------ Progress summary (meta.prog) — scris de PDA-uri ca rezumat ieftin pentru ecranul de alei
+let progTimer;
+function scheduleProg(){
+  clearTimeout(progTimer);
+  progTimer = setTimeout(async () => {
+    if (!S.invId || !S.alee) return;
+    const scan = Object.keys(S.scan).length, locs = Object.keys(S.loc).length;
+    try { await DB.update(P()+'meta/prog', {[S.alee]: {scan, locs}}); } catch {}
+  }, 1500);
+}
+
+// ------------------------------------------------------------------ Scan logic
+function focusScan(){ const i = $('#scanIn'); if (i) { i.focus(); try { i.setSelectionRange(0,0); } catch {} } }
+function normalize(raw){
+  let c = String(raw||'').trim().replace(/\s+/g,'');
+  if (/^00\d{18}$/.test(c)) c = c.slice(2);          // SSCC cu AI (00)
+  if (/^\]C1/.test(c)) c = c.slice(3);
+  return c.toUpperCase();
+}
+async function handleScan(raw){
+  const code = normalize(raw);
+  if (!code) return;
+  if (!S.invId) { beep('err'); return toast('Nu există inventar activ', 'err'); }
+  if (isLoc(code)) return openLocation(code);
+  if (S.screen!=='count' || !S.alee) { beep('err'); return toast('Scanează mai întâi o locație', 'err'); }
+  return scanCarton(code);
+}
+async function openLocation(loc){
+  const a = aisleOf(loc);
+  if (S.curLoc && S.curLoc!==loc) { const ok = await leaveLocation(); if (!ok) return; }
+  if (a !== S.alee) { subscribeAisle(a); toast('Am trecut la ' + aisleName(a), 'warn'); }
+  S.curLoc = loc; S.recent = []; S.screen = 'count';
+  beep('ok'); render();
+}
+async function leaveLocation(){
+  // returnează true dacă putem părăsi locația (lipsurile au fost confirmate sau nu există)
+  const loc = S.curLoc; if (!loc) return true;
+  const d = locData(loc);
+  const prev = S.loc[loc];
+  if (d.missing.length && (!prev || prev.lipsa !== d.missing.length)) {
+    const r = await ask(`Lipsesc ${d.missing.length} cutii la ${loc}`,
+      `<p class="mut">Nu au fost scanate:</p><ul class="list">${d.missing.map(i=>`<li><span class="ic err">!</span><span class="code">${esc(i.k.slice(0,-6))}<b>${esc(i.k.slice(-6))}</b></span></li>`).join('')}</ul>`,
+      [{label:'Confirm lipsă și închid locația', cls:'err', val:'ok'},{label:'Mai caut', cls:'sec', val:'no'}]);
+    if (r !== 'ok') { focusScan(); return false; }
+  }
+  if (!d.expected.length && !d.extras.length && !d.noi.length && !prev) return true;   // locație goală deschisă din greșeală: nu o înregistrăm
+  await DB.set(P()+'loc/'+loc, {a: aisleOf(loc), u: S.user.nume, t: Date.now(), lipsa: d.missing.length, gasite: d.found.length + d.extras.length + d.noi.length});
+  scheduleProg();
+  return true;
+}
+async function scanCarton(code){
+  const loc = S.curLoc;
+  if (!loc) { beep('err'); return toast('Scanează mai întâi locația', 'err'); }
+  const now = Date.now(); const u = S.user.nume;
+  let st = S.stoc[code] || await DB.get(P()+'stoc/'+code);
+  const prevScan = S.scan[code] || (st ? await DB.get(P()+'scan/'+code) : null);
+  if (st) {
+    if (prevScan && prevScan.l === loc) { beep('warn'); return toast('Cutia e deja scanată aici', 'warn'); }
+    if (prevScan && prevScan.l !== loc) {
+      const r = await ask('Cutie deja scanată', `<p>Cutia <b class="code">${esc(code)}</b> a fost scanată la <b>${esc(prevScan.l)}</b> de ${esc(prevScan.u)} (${fmtT(prevScan.t)}).</p><p>O înregistrez acum aici, la <b>${esc(loc)}</b>?</p>`,
+        [{label:'Da, e aici', val:'yes'},{label:'Nu, renunț', cls:'sec', val:'no'}]);
+      focusScan(); if (r!=='yes') return;
+    }
+    const mutat = st.l !== loc;
+    const upd = {};
+    upd['scan/'+code] = {a: st.a, l: loc, u, t: now, ...(mutat ? {m:1, ls: st.l} : {})};
+    upd['extra/'+code] = mutat ? {a: aisleOf(loc), l: loc, ls: st.l, u, t: now} : null;
+    await DB.update(P(), upd);
+    S.recent.push({type:'scan', code, prevScan: prevScan||null, prevExtra: S.extra[code] || null});
+    if (S.recent.length>10) S.recent.shift();
+    beep(mutat ? 'warn' : 'ok');
+    toast(mutat ? `Mutată aici — scriptic la ${st.l}` : 'OK', mutat ? 'warn' : 'ok', mutat ? 2600 : 900);
+    scheduleProg();
+    return;
+  }
+  // cutie necunoscută
+  const prevNoi = S.noi[code] || await DB.get(P()+'noi/'+safeKey(code));
+  if (prevNoi) { beep('warn'); return toast(prevNoi.l===loc ? 'Cutia nouă e deja înregistrată aici' : `Cutie nouă deja înregistrată la ${prevNoi.l}`, 'warn', 2600); }
+  beep('err');
+  const r = await ask('Cutie necunoscută', `<p>Codul <b class="code">${esc(code)}</b> nu există în stocul scriptic.</p><p>O adaug ca <b>cutie nouă</b> la locația <b>${esc(loc)}</b>?</p>`,
+    [{label:'Da, adaugă', cls:'ok', val:'yes'},{label:'Nu (cod greșit)', cls:'sec', val:'no'}]);
+  focusScan(); if (r!=='yes') return;
+  await DB.set(P()+'noi/'+safeKey(code), {a: aisleOf(loc), l: loc, u, t: now, cod: code});
+  S.recent.push({type:'noi', code: safeKey(code)});
+  toast('Cutie nouă adăugată', 'ok');
+}
+async function undo(){
+  const r = S.recent.pop(); if (!r) return;
+  if (r.type==='noi') await DB.set(P()+'noi/'+r.code, null);
+  else { const upd = {}; upd['scan/'+r.code] = r.prevScan; upd['extra/'+r.code] = r.prevExtra; await DB.update(P(), upd); }
+  toast('Ultima scanare anulată', 'warn'); scheduleProg(); render();
+}
+
+// ------------------------------------------------------------------ Admin: import / export / users
+async function loadXLSX(){
+  if (window.XLSX) return;
+  const load = src => new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load '+src)); document.head.appendChild(s); });
+  try { await load('xlsx.full.min.js'); }   // copia locală din pachet
+  catch { try { await load('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'); } catch { throw new Error('Nu am putut încărca biblioteca Excel (xlsx.full.min.js lipsește și nu e internet).'); } }
+}
+const p2 = n => String(n).padStart(2,'0');
+const fmtLocal = d => `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+function excelDate(v){ if (v instanceof Date) return isNaN(v) ? '' : fmtLocal(v); if (typeof v==='number') { const d = new Date(Math.round((v-25569)*86400*1000)); return d.toISOString().slice(0,16).replace('T',' '); } return String(v||''); }
+async function doImport(){
+  const msg = { set innerHTML(h){ const el = $('#impMsg'); if (el) el.innerHTML = h; } };
+  const f = $('#impFile').files[0]; const name = $('#impName').value.trim() || ('Inventar LCW ' + new Date().toLocaleDateString('ro-RO'));
+  if (!f) return msg.innerHTML = '<div class="banner err">Alege fișierul .xlsx</div>';
+  try {
+    msg.innerHTML = '<div class="banner info">Citesc fișierul…</div>';
+    await loadXLSX();
+    const wb = XLSX.read(await f.arrayBuffer(), {type:'array', cellDates:true});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    const hdr = rows[0].map(h => String(h).trim().toLowerCase());
+    const ci = names => { for (const n of names) { const i = hdr.findIndex(h => h.includes(n)); if (i>=0) return i; } return -1; };
+    const iS = ci(['item number','sscc']), iL = ci(['storage loc']), iZ = ci(['wh area']), iQ = ci(['quality lot']), iA = ci(['arrival']), iSt = ci(['status']), iB = ci(['batch']);
+    if (iS<0 || iL<0) throw new Error('Nu găsesc coloanele "Item Number / SSCC" și "Storage Loc." în prima linie.');
+    const stoc = {}; const alei = {}; let dup = 0;
+    for (const r of rows.slice(1)) {
+      const k = String(r[iS]??'').trim(), l = String(r[iL]??'').trim().toUpperCase();
+      if (!k || !l) continue;
+      if (/[.#$\/\[\]]/.test(k)) continue;
+      if (stoc[k]) dup++;
+      const a = aisleOf(l);
+      stoc[k] = {a, l, z: String(r[iZ]??''), q: String(r[iQ]??''), d: iA>=0 ? excelDate(r[iA]) : '', s: iSt>=0 ? String(r[iSt]??'') : '', b: iB>=0 ? String(r[iB]??'') : ''};
+      alei[a] = alei[a] || {cutii:0, locs:new Set()}; alei[a].cutii++; alei[a].locs.add(l);
+    }
+    const n = Object.keys(stoc).length;
+    if (!n) throw new Error('Nu am găsit nicio linie validă.');
+    for (const a of Object.keys(alei)) alei[a] = {cutii: alei[a].cutii, locs: alei[a].locs.size};
+    const id = 'i' + Date.now();
+    const keys = Object.keys(stoc); const CH = 1500;
+    for (let i=0;i<keys.length;i+=CH) {
+      const chunk = {}; for (const k of keys.slice(i,i+CH)) chunk[k] = stoc[k];
+      await DB.update('inv/'+id+'/stoc', chunk);
+      msg.innerHTML = `<div class="banner info">Scriu în baza de date… ${Math.min(i+CH,keys.length)}/${keys.length}</div>`;
+    }
+    const base = {nume: name, creat: Date.now(), de: S.user.nume, n};
+    await DB.set('lista/'+id, base);
+    await DB.set('inv/'+id+'/meta', {...base, alei, prog: {}});
+    await DB.set('activ', id);
+    msg.innerHTML = `<div class="banner ok">Import reușit: ${n} cutii, ${Object.keys(alei).length} alei/zone${dup?`, ${dup} coduri duplicate (s-a păstrat ultima apariție)`:''}. Inventarul „${esc(name)}" e acum activ pe toate PDA-urile.${DB.demo?' <br><b>Demo:</b> stocul importat stă doar în memoria acestei pagini; la reîncărcare revine stocul demo.':''}</div>`;
+  } catch(e) { console.error(e); msg.innerHTML = `<div class="banner err">${esc(e.message)}</div>`; }
+}
+async function doExport(){
+  const msg = $('#expMsg'); msg.textContent = 'Generez fișierul…';
+  try {
+    await loadXLSX();
+    const A = S.all; const meta = S.meta || {};
+    const status = (k, v) => { const sc = A.scan[k]; if (sc) return sc.m ? 'Mutat' : 'Găsit'; return A.loc[v.l] ? 'Lipsă' : 'Nenumărat'; };
+    const rows = Object.entries(A.stoc).sort((x,y)=> x[1].l.localeCompare(y[1].l) || x[0].localeCompare(y[0])).map(([k,v]) => { const sc = A.scan[k]||{}; return {
+      'Alee': v.a===ZONE?'Zone':v.a, 'Storage Loc.': v.l, 'Item Number / SSCC': k, 'WH Area ID': v.z, 'Quality Lot': v.q, 'Status WMS': v.s, 'Batch': v.b, 'Arrival': v.d,
+      'Status inventar': status(k,v), 'Locație fizică': sc.l || '', 'Diferență': A.scan[k] ? (sc.m ? 'Locație diferită' : '') : (A.loc[v.l] ? 'Lipsă' : ''), 'Numărat de': sc.u || '', 'Data scanării': sc.t ? new Date(sc.t) : '' }; });
+    const noi = Object.values(A.noi).sort((x,y)=>x.l.localeCompare(y.l)).map(v => ({'Alee': v.a===ZONE?'Zone':v.a, 'Locație fizică': v.l, 'Cod scanat': v.cod, 'Adăugat de': v.u, 'Data': v.t ? new Date(v.t) : ''}));
+    const locs = Object.entries(A.loc).sort((x,y)=>x[0].localeCompare(y[0])).map(([l,v]) => ({'Alee': v.a===ZONE?'Zone':v.a, 'Locație': l, 'Cutii scriptic': Object.values(A.stoc).filter(s=>s.l===l).length, 'Găsite (incl. mutate/noi)': v.gasite ?? '', 'Lipsă confirmate': v.lipsa ?? 0, 'Numărat de': v.u, 'Data': v.t ? new Date(v.t) : ''}));
+    const st = aisleStats(); const sum = Object.values(st).sort((a,b)=> a.a===ZONE?1:b.a===ZONE?-1:a.a.localeCompare(b.a)).map(s => ({'Alee': s.a===ZONE?'Zone':s.a, 'Cutii scriptic': s.cutii, 'Găsite la loc': s.gasite, 'Găsite în altă locație': s.mutate, 'Lipsă': s.lipsa, 'Nenumărate': s.nenum, 'Cutii noi': s.noi, 'Locații scriptic': s.nlocs, 'Locații numărate': s.locsDone}));
+    const wb = XLSX.utils.book_new();
+    const add = (data, name, widths) => { const ws = XLSX.utils.json_to_sheet(data.length?data:[{'(gol)':''}], {cellDates:true}); ws['!autofilter'] = {ref: ws['!ref']}; ws['!cols'] = widths.map(w=>({wch:w})); ws['!freeze'] = {xSplit:0, ySplit:1}; XLSX.utils.book_append_sheet(wb, ws, name); };
+    add(rows, 'Stoc', [6,12,22,10,10,10,10,17,14,14,16,14,18]);
+    add(noi, 'Cutii noi', [6,14,24,14,18]);
+    add(locs, 'Locații', [6,12,12,22,16,14,18]);
+    add(sum, 'Sumar alei', [6,12,12,20,8,12,10,14,16]);
+    XLSX.writeFile(wb, `Inventar_LCWOFF_${slug(meta.nume||'raport').replace(/\./g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`, {cellDates:true, compression:true});
+    msg.textContent = `Gata: ${rows.length} cutii, ${noi.length} noi, ${locs.length} locații numărate.`;
+  } catch(e) { console.error(e); msg.textContent = 'Eroare: ' + e.message; }
+}
+async function doCreateUser(){
+  const n = $('#uName').value.trim(), p = $('#uPin').value.trim(); const m = $('#uMsg');
+  if (!n || !/^\d{4,8}$/.test(p)) return m.innerHTML = '<div class="banner err">Nume și PIN de 4–8 cifre.</div>';
+  try { await DB.auth.createUser(n, p); await DB.set('utilizatori/'+slug(n), {nume: n, creat: Date.now()}); m.innerHTML = `<div class="banner ok">Utilizatorul <b>${esc(n)}</b> a fost creat. Intră cu numele și PIN-ul pe PDA.</div>`; $('#uName').value=''; $('#uPin').value=''; }
+  catch(e) { m.innerHTML = `<div class="banner err">${esc(e.code==='auth/email-already-in-use' ? 'Există deja un utilizator cu acest nume.' : e.message)}</div>`; }
+}
+
+// ------------------------------------------------------------------ Events
+document.addEventListener('submit', async e => {
+  if (e.target.id==='loginF') {
+    e.preventDefault(); const err = $('#lErr'); err.classList.add('hide');
+    try { const u = await DB.auth.login($('#lName').value, $('#lPin').value); S.user = u; S.admin = (CFG.admini||[]).map(slug).includes(u.slug); S.screen = 'jobs'; await loadActive(); render(); }
+    catch(ex) { err.textContent = ex.message; err.classList.remove('hide'); }
+  }
+});
+document.addEventListener('click', async e => {
+  const b = e.target.closest('button, [data-goloc]');
+  if (!b) { if (S.screen==='count' && !e.target.closest('input,select,a,.overlay')) focusScan(); return; }
+  const a = b.dataset.a;
+  if (a==='logout') { unsubAll(S.unsub); unsubAll(S.allUnsub); for (const k of ['unsubMeta','unsubInvs','unsubActiv','unsubUsers']) { S[k] && S[k](); S[k] = null; } await DB.auth.logout(); S.user=null; S.screen='login'; S.curLoc=null; S.alee=null; S.all=null; render(); }
+  else if (a==='jobs') { if (S.curLoc) { const ok = await leaveLocation(); if (!ok) return; S.curLoc=null; } S.screen='jobs'; render(); }
+  else if (a==='admin') { S.screen='admin'; if (!S.all) subscribeAll(); render(); }
+  else if (a==='kbd') { S.kbd = !S.kbd; render(); }
+  else if (a==='done') { const ok = await leaveLocation(); if (ok) { toast('Locație închisă', 'ok'); S.curLoc = null; render(); } }
+  else if (a==='undo') undo();
+  else if (b.dataset.alee) { subscribeAisle(b.dataset.alee); S.curLoc=null; S.screen='count'; render(); }
+  else if (b.dataset.goloc) openLocation(b.dataset.goloc);
+  else if (b.dataset.tab) { S.adminTab = b.dataset.tab; render(); }
+  else if (b.id==='impGo') doImport();
+  else if (b.id==='expGo') doExport();
+  else if (b.id==='uGo') doCreateUser();
+  else if (b.dataset.activ) { await DB.set('activ', b.dataset.activ); toast('Inventar activat', 'ok'); }
+  else if (b.dataset.del) { const id = b.dataset.del; const r = await ask('Ștergi inventarul?', `<p>Se șterg definitiv stocul și toate scanările din „${esc(S.invs[id]?.nume||id)}". Descarcă raportul înainte.</p>`, [{label:'Șterge definitiv', cls:'err', val:'y'},{label:'Renunță', cls:'sec', val:'n'}]); if (r==='y') { if (id===S.invId) await DB.set('activ', null); await DB.set('inv/'+id, null); await DB.set('lista/'+id, null); toast('Inventar șters', 'warn'); } }
+  else if (b.id==='demoReset') { const r = await ask('Resetezi demo-ul?', '<p>Se șterg scanările salvate în acest browser.</p>', [{label:'Da, resetează', cls:'err', val:'y'},{label:'Renunță', cls:'sec', val:'n'}]); if (r==='y') DB.resetAll(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key!=='Enter') return;
+  const i = e.target; if (i && i.id==='scanIn') { e.preventDefault(); const v = i.value; i.value=''; handleScan(v); }
+});
+// scanner trimite tastele chiar dacă inputul nu e focusat: colectăm un buffer
+let buf = '', bufT = 0;
+document.addEventListener('keypress', e => {
+  if (S.screen==='login' || $('#modal').innerHTML || (e.target && ['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName))) return;
+  const now = Date.now(); if (now - bufT > 400) buf = ''; bufT = now;
+  if (e.key==='Enter') { if (buf.length>=3) handleScan(buf); buf=''; } else if (e.key.length===1) buf += e.key;
+});
+
+// ------------------------------------------------------------------ Boot
+(async () => {
+  try {
+    if (CFG.demo) {
+      if (!window.DEMO_STOC) await new Promise(res => { const s=document.createElement('script'); s.src='demo-stoc.js'; s.onload=res; s.onerror=res; document.head.appendChild(s); });
+      DB = makeDemoDB();
+    } else {
+      if (!CFG.firebase?.apiKey) throw new Error('Completează datele Firebase în config.js sau pune demo: true.');
+      DB = await makeFirebaseDB();
+      DB.onConn(c => { S.conn = c; if (S.screen!=='login') { const d = $('.dot'); if (d) d.classList.toggle('off', !c); } });
+      const u = await DB.auth.waitUser();
+      if (u) { const name = (u.email||'').split('@')[0]; S.user = {nume: name, slug: slug(name), uid: u.uid}; S.admin = (CFG.admini||[]).map(slug).includes(S.user.slug); S.screen='jobs'; await loadActive(); }
+    }
+    render();
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  } catch(e) { $('#app').innerHTML = `<main><div class="card banner err">${esc(e.message)}</div></main>`; }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "Inventar LCW Offline",
+  "short_name": "Inventar LCW",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f2a4a",
+  "theme_color": "#0f2a4a",
+  "lang": "ro",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
