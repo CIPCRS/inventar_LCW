@@ -37,20 +37,24 @@ la fiecare locație se scanează eticheta locației, apoi toate cutiile găsite 
 
 Codurile scanate sunt normalizate: SSCC cu prefix `00` (20 cifre) e curățat automat, spațiile se elimină.
 
-## Panoul admin (nume din `admini` în config.js)
+## Panoul admin / supervizor
 
-- **Progres**: cutii găsite / mutate / lipsă / nenumărate / noi, pe alei și pe echipe, în timp real.
+- **Progres** (administrator și supervizor): cutii găsite / mutate / lipsă / nenumărate / noi, pe alei și pe echipe, în timp real.
 - **Import stoc**: încarci exportul WMS `RO-LCWOFF_View_Item*.xlsx` → se creează un inventar nou, activ pe toate PDA-urile.
   Coloane folosite: *Item Number / SSCC, Storage Loc., WH Area ID, Quality Lot, Arrival, Status, Batch*.
 - **Raport Excel**: `Stoc` (fiecare cutie cu *Status inventar* = Găsit / Mutat / Lipsă / Nenumărat, *Locație fizică*,
   *Diferență*, cine și când), `Cutii noi`, `Locații` (numărate, de cine, lipsă confirmate), `Sumar alei`. Toate cu filtru.
-- **Utilizatori**: creezi conturile echipelor (nume + PIN 4–8 cifre).
+- **Utilizatori** (doar administrator): creezi conturile cu rol — **Administrator** (tot), **Supervizor** (progres, alocare alei,
+  raport, numărare), **Numărător** (doar numărarea aleilor alocate) — și le poți dezactiva/reactiva sau schimba rolul.
+  Numele din `admini` (config.js) sunt administratori permanenți. PIN-ul se schimbă doar din consola Firebase.
+- **Alocare alei** (administrator și supervizor): bifezi pe fiecare numărător aleile pe care le vede pe PDA (sau „Toate").
+  Alocarea e per inventar; un numărător fără alei alocate vede mesajul „Nicio alee alocată".
 - **Inventare**: lista inventarelor, activare, ștergere.
 
 ## Punere în funcțiune (GitHub Pages + Firebase) — pașii în Edge
 
 Aplicația stă în proiectul Firebase existent **`inventar-martur`** (plan Blaze), alături de aplicația Martur:
-colecțiile ei sunt prefixate `lcw_` și conturile de utilizator sunt comune (același nume + PIN pe ambele aplicații).
+colecțiile ei sunt prefixate `lcw_`, iar conturile sunt separate de Martur prin domeniul de login `inventar-lcw.local`.
 
 ### 1. Firebase (proiectul inventar-martur)
 1. [console.firebase.google.com](https://console.firebase.google.com) → proiectul **inventar-martur**.
@@ -67,11 +71,11 @@ colecțiile ei sunt prefixate `lcw_` și conturile de utilizator sunt comune (ac
 ```js
 demo: false,
 admini: ['adrian'],
-domeniuEmail: 'inventar-martur.app',   // același ca în config.js de la Martur, ca să meargă aceleași conturi
+domeniuEmail: 'inventar-lcw.local',    // separat de Martur (inventar.local): depozite și echipe diferite
 prefix: 'lcw_',
 firebase: { apiKey: '…', authDomain: 'inventar-martur.firebaseapp.com', projectId: 'inventar-martur', appId: '…' }
 ```
-Conturile echipelor: cele de la Martur merg direct; altele noi se creează din Admin → Utilizatori.
+Primul administrator se creează în Firebase Authentication (Add user → `nume@inventar-lcw.local`, parola `PIN`+PIN) și se trece în `admini`; restul conturilor se creează din aplicație (Admin → Utilizatori), cu rol.
 
 ### 3. GitHub Pages
 1. Repo nou (ex. `CIPCRS/inventar_LCW`, public) → **Add file → Upload files** → toate fișierele din pachet

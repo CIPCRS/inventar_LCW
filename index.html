@@ -87,7 +87,7 @@ small.ver{display:block;text-align:center;color:var(--mut);padding:10px;font-siz
 
 <script type="module">
 const CFG = window.INV_CONFIG || {demo:true};
-const VER = '1.0';
+const VER = '1.1';
 const $ = (s, el=document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtT = t => t ? new Date(t).toLocaleString('ro-RO', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
@@ -157,7 +157,7 @@ function makeDemoDB(){
     auth: {
       async login(name, pin){ if (!name || !pin) throw new Error('Completează numele și PIN-ul.'); return {nume: name.trim(), slug: slug(name)}; },
       async logout(){},
-      async createUser(){ throw new Error('În modul demo nu se creează conturi — orice nume + PIN funcționează.'); }
+      async createUser(){ /* demo: contul există doar ca înregistrare în lista de utilizatori */ }
     },
     async resetAll(){ localStorage.removeItem(KEY); location.reload(); }
   };
@@ -186,7 +186,7 @@ async function makeFirebaseDB(){
     const s = seg(path);
     if (s[0]==='activ') return {kind:'activ', ref: F.doc(db, COL.cfg, 'activ')};
     if (s[0]==='lista') return s[1] ? {kind:'doc', ref: F.doc(db, COL.inv, s[1]), sub: s.slice(2)} : {kind:'col', ref: F.collection(db, COL.inv)};
-    if (s[0]==='utilizatori') return s[1] ? {kind:'doc', ref: F.doc(db, COL.users, s[1]), sub: []} : {kind:'col', ref: F.collection(db, COL.users)};
+    if (s[0]==='utilizatori') return s[1] ? {kind:'doc', ref: F.doc(db, COL.users, s[1]), sub: s.slice(2)} : {kind:'col', ref: F.collection(db, COL.users)};
     if (s[0]==='inv') {
       const id = s[1];
       if (s.length===2) return {kind:'invroot', id, ref: F.doc(db, COL.inv, id)};
@@ -247,8 +247,13 @@ async function makeFirebaseDB(){
     auth: {
       waitUser(){ return new Promise(res => { const un = A.onAuthStateChanged(auth, u => { un(); res(u); }); }); },
       async login(name, pin){
-        try { const c = await A.signInWithEmailAndPassword(auth, email(name), pw(pin)); return {nume: name.trim(), slug: slug(name), uid: c.user.uid}; }
-        catch(e){ throw new Error(/invalid|wrong|not-found|credential/i.test(e.code||'') ? 'Nume sau PIN greșit.' : e.message); }
+        const incearca = async parola => { const c = await A.signInWithEmailAndPassword(auth, email(name), parola); return {nume: name.trim(), slug: slug(name), uid: c.user.uid}; };
+        try { return await incearca(pw(pin)); }
+        catch(e){
+          const gresit = /invalid|wrong|not-found|credential/i.test(e.code||'');
+          if (gresit && String(pin).trim().length >= 6) { try { return await incearca(String(pin).trim()); } catch {} }   // cont creat în consolă cu PIN-ul ca parolă
+          throw new Error(gresit ? 'Nume sau PIN greșit.' : (e.code==='auth/too-many-requests' ? 'Prea multe încercări — așteaptă câteva minute.' : e.message));
+        }
       },
       async logout(){ await A.signOut(auth); },
       async createUser(name, pin){
@@ -270,9 +275,32 @@ const S = {
   alee: null, stoc: {}, scan: {}, extra: {}, noi: {}, loc: {},
   locIndex: {}, locsSorted: [],
   curLoc: null, recent: [], unsub: [], conn: true, kbd: false,
-  adminTab: 'dash', all: null, allUnsub: [], progress: null
+  adminTab: 'dash', all: null, allUnsub: [], progress: null, users: {}
 };
 const P = () => 'inv/' + S.invId + '/';
+const ROLURI = {admin: 'Administrator', supervizor: 'Supervizor', numarator: 'Numărător'};
+const isAdmin = () => S.user?.rol === 'admin';
+const isSup = () => S.user?.rol === 'admin' || S.user?.rol === 'supervizor';
+// aleile pe care le vede utilizatorul curent: admin/supervizor = toate; operator = cele alocate în inventarul activ
+function aleiPermise(){
+  if (isSup()) return null;   // null = toate
+  const al = S.meta?.alocari?.[S.user.slug];
+  if (!al) return [];
+  if (al.toate) return null;
+  return Object.keys(al).filter(k => al[k] && k!=='toate');
+}
+const aleePermisa = a => { const p = aleiPermise(); return p===null || p.includes(a); };
+// după autentificare: citește fișa utilizatorului (rol, activ); adminii din config.js primesc fișă automat
+async function completeazaUser(u){
+  let doc = null;
+  try { doc = await DB.get('utilizatori/' + u.slug); } catch(e) { console.warn(e); }
+  const dinConfig = (CFG.admini||[]).map(slug).includes(u.slug);
+  if (doc && doc.activ === false && !dinConfig) { try { await DB.auth.logout(); } catch {} throw new Error('Contul este dezactivat. Vorbește cu administratorul.'); }
+  u.rol = dinConfig ? 'admin' : (doc?.rol || 'numarator');
+  if (doc?.nume) u.nume = doc.nume;
+  if (!doc && dinConfig) { try { await DB.set('utilizatori/' + u.slug, {nume: u.nume, rol: 'admin', activ: true, creat: Date.now()}); } catch {} }
+  return u;
+}
 
 // ------------------------------------------------------------------ UI helpers
 function toast(msg, kind='', ms=2200){
@@ -303,15 +331,17 @@ function render(){
   const app = $('#app');
   if (S.screen==='login') return app.innerHTML = viewLogin();
   const keep = $('#scanIn')?.value || '';
+  const keepMsg = {uMsg: $('#uMsg')?.innerHTML, impMsg: $('#impMsg')?.innerHTML};
   const head = `<header><span class="dot ${S.conn?'':'off'}" title="${S.conn?'Conectat':'Fără conexiune'}"></span>
     <h1>${esc(CFG.titlu||'Inventar')}<div class="sub">${esc(S.meta?.nume || 'fără inventar activ')} · ${esc(S.user.nume)}</div></h1>
     ${S.screen==='count' ? `<button data-a="jobs">Alei</button>` : ''}
-    ${S.admin && S.screen!=='admin' ? `<button data-a="admin">Admin</button>` : ''}
+    ${isSup() && S.screen!=='admin' ? `<button data-a="admin">${isAdmin()?'Admin':'Panou'}</button>` : ''}
     ${S.screen==='admin' ? `<button data-a="jobs">PDA</button>` : ''}
     <button data-a="logout">Ieși</button></header>`;
   let body = S.screen==='jobs' ? viewJobs() : S.screen==='count' ? viewCount() : viewAdmin();
   app.innerHTML = head + `<main>${body}</main><small class="ver">Inventar LCW v${VER}${DB.demo?' · DEMO (date locale în browser)':''}</small>`;
   const si = $('#scanIn'); if (si && keep) si.value = keep;
+  for (const [id, h] of Object.entries(keepMsg)) { const el = $('#'+id); if (el && h) el.innerHTML = h; }
   if (S.screen==='count') focusScan();
 }
 
@@ -342,8 +372,11 @@ function viewJobs(){
   const keys = Object.keys(st).sort((a,b)=> a===ZONE?1:b===ZONE?-1:a.localeCompare(b));
   if (!S.invId) return `<div class="card"><h2>Niciun inventar activ</h2><p>Un administrator trebuie să importe stocul (Admin → Import stoc).</p></div>`;
   const prog = S.meta?.prog || {};
-  return `<div class="card"><h2>Alege aleea de numărat</h2><p class="mut">Echipa: <b>${esc(S.user.nume)}</b>. Progresul se actualizează pe măsură ce echipele numără. Poți scana direct o etichetă de locație și aplicația sare la aleea ei.</p></div>
-  ${keys.map(a => { const x = st[a]; const p = prog[a] || {}; const pct = x.cutii ? Math.round(100*(p.scan||0)/x.cutii) : 0;
+  const permise = aleiPermise();
+  const vizibile = permise===null ? keys : keys.filter(a => permise.includes(a));
+  if (permise!==null && !vizibile.length) return `<div class="card"><h2>Nicio alee alocată</h2><p>Salut, <b>${esc(S.user.nume)}</b>. Pentru inventarul „${esc(S.meta?.nume||'')}" nu ai încă alei alocate — cere supervizorului sau administratorului să îți aloce aleile din panoul de progres (tab „Alocare").</p></div>`;
+  return `<div class="card"><h2>Alege aleea de numărat</h2><p class="mut">${esc(ROLURI[S.user.rol]||'')}: <b>${esc(S.user.nume)}</b>. Progresul se actualizează pe măsură ce echipele numără. Poți scana direct o etichetă de locație și aplicația sare la aleea ei.</p></div>
+  ${vizibile.map(a => { const x = st[a]; const p = prog[a] || {}; const pct = x.cutii ? Math.round(100*(p.scan||0)/x.cutii) : 0;
     return `<button class="job" data-alee="${a}"><span class="t">${a===ZONE?'Zone':a}</span><span class="b"><div>${esc(aisleName(a))}${a===ZONE?' <span class="mut">(WCD, WR2, WIO)</span>':''}</div><div class="mut">${x.cutii} cutii · ${x.locs} locații · ${p.locs||0} numărate</div><div class="bar" style="margin-top:6px"><i style="width:${pct}%"></i></div></span><span class="pill ${pct>=100?'ok':pct>0?'info':'gray'}">${pct}%</span></button>`; }).join('')}
   <div class="scanbar"><div class="row"><input id="scanIn" placeholder="Scanează o locație…" autocomplete="off" inputmode="${S.kbd?'text':'none'}"><button class="sec" data-a="kbd" style="flex:0 0 auto">${S.kbd?'⌨︎ on':'⌨︎'}</button></div></div>`;
 }
@@ -389,8 +422,21 @@ function viewCount(){
 }
 
 function viewAdmin(){
-  const tabs = [['dash','Progres'],['import','Import stoc'],['export','Raport Excel'],['users','Utilizatori'],['inv','Inventare']];
+  const toate = [['dash','Progres'],['aloc','Alocare alei'],['export','Raport Excel'],['import','Import stoc'],['users','Utilizatori'],['inv','Inventare']];
+  const tabs = isAdmin() ? toate : toate.filter(([k]) => ['dash','aloc','export'].includes(k));
+  if (!tabs.some(([k]) => k===S.adminTab)) S.adminTab = 'dash';
   let b = `<div class="tabs">${tabs.map(([k,l])=>`<button class="${S.adminTab===k?'on':''}" data-tab="${k}">${l}</button>`).join('')}</div>`;
+  if (S.adminTab==='aloc') {
+    const alei = Object.keys(S.meta?.alei || {}).sort((a,b)=> a===ZONE?1:b===ZONE?-1:a.localeCompare(b));
+    const ops = Object.entries(S.users||{}).filter(([k,u]) => (u.rol||'numarator')==='numarator' && u.activ!==false).sort((a,b)=>a[1].nume.localeCompare(b[1].nume));
+    const aloc = S.meta?.alocari || {};
+    if (!S.invId) return b + `<div class="card">Nu există inventar activ.</div>`;
+    return b + `<div class="card"><h2>Alocarea aleilor pe numărători — ${esc(S.meta?.nume||'')}</h2><p class="mut">Numărătorii văd pe PDA doar aleile bifate aici (sau toate, dacă bifezi „Toate"). Administratorii și supervizorii văd tot. Alocarea e per inventar: la un inventar nou se face din nou.</p>
+    <div class="tw"><table><tr><th>Numărător</th><th class="center">Toate</th>${alei.map(a=>`<th class="center">${a===ZONE?'Zone':a}</th>`).join('')}</tr>
+    ${ops.map(([k,u]) => { const x = aloc[k]||{}; return `<tr><td><b>${esc(u.nume)}</b></td><td class="center"><input type="checkbox" data-aloc="${k}" data-alee="toate" ${x.toate?'checked':''} style="width:22px;height:22px;min-height:0"></td>${alei.map(a=>`<td class="center"><input type="checkbox" data-aloc="${k}" data-alee="${a}" ${x[a]?'checked':''} ${x.toate?'disabled':''} style="width:22px;height:22px;min-height:0"></td>`).join('')}</tr>`; }).join('') || `<tr><td colspan="${alei.length+2}" class="mut">Nu există numărători activi. Creează-i din tab-ul Utilizatori (rol „Numărător").</td></tr>`}
+    </table></div>
+    <p class="mut">Numărători fără nicio alee: ${esc(ops.filter(([k])=>{const x=aloc[k]||{}; return !x.toate && !alei.some(a=>x[a]);}).map(([k,u])=>u.nume).join(', ') || '—')}</p></div>`;
+  }
   if (S.adminTab==='dash') {
     if (!S.all) return b + `<div class="card">Se încarcă datele inventarului…</div>`;
     const st = aisleStats(); const keys = Object.keys(st).sort((a,b)=> a===ZONE?1:b===ZONE?-1:a.localeCompare(b));
@@ -412,10 +458,13 @@ function viewAdmin(){
     b += `<div class="card"><h2>Raport Excel scriptic vs. fizic</h2><p class="mut">Fișierul conține: <b>Stoc</b> (fiecare cutie cu status Găsit / Mutat / Lipsă / Nenumărat, locația fizică, cine și când a scanat), <b>Cutii noi</b> (scanate dar inexistente în stoc), <b>Locații</b> (numărate, de cine, lipsuri confirmate) și <b>Sumar alei</b>. Coloanele au filtru.</p>
     <button id="expGo" ${S.all?'':'disabled'}>Descarcă raportul (.xlsx)</button> <span class="mut" id="expMsg">${S.all?'':'Se încarcă datele…'}</span></div>`;
   } else if (S.adminTab==='users') {
-    b += `<div class="card"><h2>Utilizatori (echipe)</h2><p class="mut">Fiecare echipă intră cu nume + PIN. ${DB.demo?'În modul demo orice nume + PIN funcționează; conturile reale se creează după conectarea la Firebase.':'Contul se creează în Firebase Authentication ca <i>nume@'+esc(CFG.domeniuEmail||'')+'</i>; PIN-ul poate avea 4–8 cifre. Ștergerea se face din consola Firebase.'}</p>
-    <div class="row"><input id="uName" placeholder="nume (ex. echipa1)" autocapitalize="off"><input id="uPin" placeholder="PIN" inputmode="numeric"><button id="uGo" style="flex:0 0 auto">Creează</button></div><div id="uMsg" style="margin-top:10px"></div>
-    <div class="tw" style="margin-top:12px"><table><tr><th>Nume</th><th>Creat</th></tr>${Object.values(S.users||{}).map(u=>`<tr><td>${esc(u.nume)}</td><td>${fmtT(u.creat)}</td></tr>`).join('')||'<tr><td colspan=2 class="mut">—</td></tr>'}</table></div>
-    <p class="mut">Administratori (din config.js): ${esc((CFG.admini||[]).join(', '))}</p></div>`;
+    const ord = {admin:0, supervizor:1, numarator:2};
+    const lista = Object.entries(S.users||{}).sort((a,b)=> (ord[a[1].rol||'numarator']-ord[b[1].rol||'numarator']) || a[1].nume.localeCompare(b[1].nume));
+    b += `<div class="card"><h2>Utilizatori</h2><p class="mut">Fiecare utilizator intră cu nume + PIN (4–8 cifre). ${DB.demo?'În modul demo orice nume + PIN intră; rolul se ia din lista de mai jos.':'Contul se creează în Firebase Authentication ca <i>nume@'+esc(CFG.domeniuEmail||'')+'</i>. Schimbarea PIN-ului sau ștergerea definitivă se fac din consola Firebase; de aici poți dezactiva contul.'}</p>
+    <p class="mut"><b>Administrator</b>: tot (import, utilizatori, inventare, alocare, raport, numărare). <b>Supervizor</b>: progres, alocare alei, raport, numărare. <b>Numărător</b>: doar numărarea aleilor alocate.</p>
+    <div class="row" style="flex-wrap:wrap"><input id="uName" placeholder="nume (ex. ion.popescu)" autocapitalize="off" style="flex:2 1 160px"><input id="uPin" placeholder="PIN" inputmode="numeric" style="flex:1 1 90px"><select id="uRol" style="flex:1 1 160px"><option value="numarator">Numărător</option><option value="supervizor">Supervizor</option><option value="admin">Administrator</option></select><button id="uGo" style="flex:0 0 auto">Creează</button></div><div id="uMsg" style="margin-top:10px"></div>
+    <div class="tw" style="margin-top:12px"><table><tr><th>Nume</th><th>Login</th><th>Rol</th><th>Stare</th><th>Creat</th><th></th></tr>${lista.map(([k,u])=>`<tr><td><b>${esc(u.nume)}</b></td><td class="mut">${esc(k)}</td><td><select data-urol="${k}" style="min-height:34px;padding:4px 8px;width:auto">${Object.entries(ROLURI).map(([r,l])=>`<option value="${r}" ${(u.rol||'numarator')===r?'selected':''}>${l}</option>`).join('')}</select></td><td>${u.activ===false?'<span class="pill err">dezactivat</span>':'<span class="pill ok">activ</span>'}</td><td>${fmtT(u.creat)}</td><td><button class="ghost" data-uact="${k}" data-val="${u.activ===false?'1':'0'}">${u.activ===false?'Reactivează':'Dezactivează'}</button></td></tr>`).join('')||'<tr><td colspan=6 class="mut">—</td></tr>'}</table></div>
+    <p class="mut">Administratori permanenți (din config.js, nu pot fi dezactivați de aici): ${esc((CFG.admini||[]).join(', '))}</p></div>`;
   } else if (S.adminTab==='inv') {
     b += `<div class="card"><h2>Inventare</h2><div class="tw"><table><tr><th>Denumire</th><th class="n">Cutii</th><th>Creat</th><th>De</th><th></th></tr>${Object.entries(S.invs).sort((a,b)=>(b[1].creat||0)-(a[1].creat||0)).map(([id,m])=>`<tr><td>${esc(m.nume)} ${id===S.invId?'<span class="pill ok">activ</span>':''}</td><td class="n">${m.n||''}</td><td>${fmtT(m.creat)}</td><td>${esc(m.de||'')}</td><td>${id!==S.invId?`<button class="ghost" data-activ="${id}">Activează</button>`:''}<button class="ghost" style="color:var(--err)" data-del="${id}">Șterge</button></td></tr>`).join('')||'<tr><td colspan=5 class="mut">—</td></tr>'}</table></div>
     ${DB.demo?'<p class="mut">Demo: <button class="ghost" id="demoReset">Șterge progresul demo din acest browser</button></p>':''}</div>`;
@@ -429,7 +478,7 @@ function rebuildIndex(){
   const idx = {}; for (const [k,v] of Object.entries(S.stoc)) (idx[v.l] = idx[v.l] || []).push(k);
   S.locIndex = idx; S.locsSorted = Object.keys(idx).sort();
 }
-const adminCanRender = () => S.screen==='admin' && ['dash','export','inv'].includes(S.adminTab);
+const adminCanRender = () => S.screen==='admin' && ['dash','export','inv','aloc'].includes(S.adminTab);
 async function loadActive(){
   // inventarul activ + meta lui (alei, progres) + lista inventarelor
   S.unsubActiv && S.unsubActiv();
@@ -461,7 +510,7 @@ function subscribeAll(){
   const all = {stoc:{}, scan:{}, extra:{}, noi:{}, loc:{}}; let got = 0;
   for (const k of Object.keys(all)) S.allUnsub.push(DB.listen(P()+k, v => { all[k] = v; got |= 1; S.all = all; if (adminCanRender()) render(); }));
   S.unsubUsers && S.unsubUsers();
-  S.unsubUsers = DB.listen('utilizatori', v => { S.users = v; if (S.screen==='admin' && S.adminTab==='users') render(); });
+  S.unsubUsers = DB.listen('utilizatori', v => { S.users = v || {}; if (S.screen==='admin' && ['users','aloc'].includes(S.adminTab)) render(); });
 }
 
 // ------------------------------------------------------------------ Progress summary (meta.prog) — scris de PDA-uri ca rezumat ieftin pentru ecranul de alei
@@ -493,6 +542,7 @@ async function handleScan(raw){
 }
 async function openLocation(loc){
   const a = aisleOf(loc);
+  if (!aleePermisa(a)) { beep('err'); return toast(`${aisleName(a)} nu îți este alocată`, 'err', 3000); }
   if (S.curLoc && S.curLoc!==loc) { const ok = await leaveLocation(); if (!ok) return; }
   if (a !== S.alee) { subscribeAisle(a); toast('Am trecut la ' + aisleName(a), 'warn'); }
   S.curLoc = loc; S.recent = []; S.screen = 'count';
@@ -631,9 +681,11 @@ async function doExport(){
   } catch(e) { console.error(e); msg.textContent = 'Eroare: ' + e.message; }
 }
 async function doCreateUser(){
-  const n = $('#uName').value.trim(), p = $('#uPin').value.trim(); const m = $('#uMsg');
+  const n = $('#uName').value.trim(), p = $('#uPin').value.trim(), rol = $('#uRol').value; const m = { set innerHTML(h){ const el = $('#uMsg'); if (el) el.innerHTML = h; } };
   if (!n || !/^\d{4,8}$/.test(p)) return m.innerHTML = '<div class="banner err">Nume și PIN de 4–8 cifre.</div>';
-  try { await DB.auth.createUser(n, p); await DB.set('utilizatori/'+slug(n), {nume: n, creat: Date.now()}); m.innerHTML = `<div class="banner ok">Utilizatorul <b>${esc(n)}</b> a fost creat. Intră cu numele și PIN-ul pe PDA.</div>`; $('#uName').value=''; $('#uPin').value=''; }
+  if (!slug(n)) return m.innerHTML = '<div class="banner err">Numele trebuie să conțină litere sau cifre.</div>';
+  if (S.users[slug(n)]) return m.innerHTML = `<div class="banner err">Există deja utilizatorul <b>${esc(slug(n))}</b>.</div>`;
+  try { await DB.auth.createUser(n, p); await DB.set('utilizatori/'+slug(n), {nume: n, rol, activ: true, creat: Date.now(), de: S.user.nume}); m.innerHTML = `<div class="banner ok">${esc(ROLURI[rol])} <b>${esc(n)}</b> creat. Intră pe PDA cu numele <b>${esc(slug(n))}</b> și PIN-ul ales.${rol==='numarator'?' Nu uita să îi aloci aleile (tab „Alocare alei").':''}</div>`; const a=$('#uName'), b=$('#uPin'); if (a) a.value=''; if (b) b.value=''; }
   catch(e) { m.innerHTML = `<div class="banner err">${esc(e.code==='auth/email-already-in-use' ? 'Există deja un utilizator cu acest nume.' : e.message)}</div>`; }
 }
 
@@ -641,7 +693,7 @@ async function doCreateUser(){
 document.addEventListener('submit', async e => {
   if (e.target.id==='loginF') {
     e.preventDefault(); const err = $('#lErr'); err.classList.add('hide');
-    try { const u = await DB.auth.login($('#lName').value, $('#lPin').value); S.user = u; S.admin = (CFG.admini||[]).map(slug).includes(u.slug); S.screen = 'jobs'; await loadActive(); render(); }
+    try { const u = await completeazaUser(await DB.auth.login($('#lName').value, $('#lPin').value)); S.user = u; S.screen = 'jobs'; await loadActive(); render(); }
     catch(ex) { err.textContent = ex.message; err.classList.remove('hide'); }
   }
 });
@@ -655,7 +707,8 @@ document.addEventListener('click', async e => {
   else if (a==='kbd') { S.kbd = !S.kbd; render(); }
   else if (a==='done') { const ok = await leaveLocation(); if (ok) { toast('Locație închisă', 'ok'); S.curLoc = null; render(); } }
   else if (a==='undo') undo();
-  else if (b.dataset.alee) { subscribeAisle(b.dataset.alee); S.curLoc=null; S.screen='count'; render(); }
+  else if (b.dataset.alee && !b.dataset.aloc) { if (!aleePermisa(b.dataset.alee)) return toast('Aleea nu îți este alocată', 'err'); subscribeAisle(b.dataset.alee); S.curLoc=null; S.screen='count'; render(); }
+  else if (b.dataset.uact) { const k = b.dataset.uact; if ((CFG.admini||[]).map(slug).includes(k)) return toast('Administrator permanent din config.js', 'warn'); if (k===S.user.slug) return toast('Nu îți poți dezactiva propriul cont', 'warn'); await DB.update('utilizatori/'+k, {activ: b.dataset.val==='1'}); toast(b.dataset.val==='1' ? 'Cont reactivat' : 'Cont dezactivat', 'ok'); }
   else if (b.dataset.goloc) openLocation(b.dataset.goloc);
   else if (b.dataset.tab) { S.adminTab = b.dataset.tab; render(); }
   else if (b.id==='impGo') doImport();
@@ -664,6 +717,18 @@ document.addEventListener('click', async e => {
   else if (b.dataset.activ) { await DB.set('activ', b.dataset.activ); toast('Inventar activat', 'ok'); }
   else if (b.dataset.del) { const id = b.dataset.del; const r = await ask('Ștergi inventarul?', `<p>Se șterg definitiv stocul și toate scanările din „${esc(S.invs[id]?.nume||id)}". Descarcă raportul înainte.</p>`, [{label:'Șterge definitiv', cls:'err', val:'y'},{label:'Renunță', cls:'sec', val:'n'}]); if (r==='y') { if (id===S.invId) await DB.set('activ', null); await DB.set('inv/'+id, null); await DB.set('lista/'+id, null); toast('Inventar șters', 'warn'); } }
   else if (b.id==='demoReset') { const r = await ask('Resetezi demo-ul?', '<p>Se șterg scanările salvate în acest browser.</p>', [{label:'Da, resetează', cls:'err', val:'y'},{label:'Renunță', cls:'sec', val:'n'}]); if (r==='y') DB.resetAll(); }
+});
+document.addEventListener('change', async e => {
+  const t = e.target;
+  if (t.dataset.urol) {
+    const k = t.dataset.urol;
+    if ((CFG.admini||[]).map(slug).includes(k) && t.value!=='admin') { t.value='admin'; return toast('Administrator permanent din config.js', 'warn'); }
+    if (k===S.user.slug && t.value!=='admin') { t.value='admin'; return toast('Nu îți poți retrage singur rolul de administrator', 'warn'); }
+    await DB.update('utilizatori/'+k, {rol: t.value}); toast('Rol actualizat: ' + ROLURI[t.value], 'ok');
+  } else if (t.dataset.aloc) {
+    const k = t.dataset.aloc, a = t.dataset.alee;
+    await DB.update(P()+'meta/alocari/'+k, {[a]: t.checked});
+  }
 });
 document.addEventListener('keydown', e => {
   if (e.key!=='Enter') return;
@@ -688,7 +753,7 @@ document.addEventListener('keypress', e => {
       DB = await makeFirebaseDB();
       DB.onConn(c => { S.conn = c; if (S.screen!=='login') { const d = $('.dot'); if (d) d.classList.toggle('off', !c); } });
       const u = await DB.auth.waitUser();
-      if (u) { const name = (u.email||'').split('@')[0]; S.user = {nume: name, slug: slug(name), uid: u.uid}; S.admin = (CFG.admini||[]).map(slug).includes(S.user.slug); S.screen='jobs'; await loadActive(); }
+      if (u) { const name = (u.email||'').split('@')[0]; try { S.user = await completeazaUser({nume: name, slug: slug(name), uid: u.uid}); S.screen='jobs'; await loadActive(); } catch(e) { S.user = null; S.screen = 'login'; toast(e.message, 'err', 4000); } }
     }
     render();
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});

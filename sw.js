@@ -1,6 +1,6 @@
 // Service worker: network-first, cu fallback din cache când PDA-ul pierde WiFi-ul.
 // La fiecare versiune nouă a aplicației, schimbă numărul din CACHE.
-const CACHE = 'inventar-lcw-v1';
+const CACHE = 'inventar-lcw-v2';
 const FILES = ['./', './index.html', './config.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
